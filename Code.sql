@@ -1,6 +1,6 @@
 use dua_data;
 
-# Question 1: Những SP nào chúng ta nên đặt hàng nhiều hơn hoặc ít hơn? 
+# Question 1: Which product should we need to order more or less?
 
 # DATA EXPLORATION
 
@@ -17,15 +17,15 @@ from products
 where 
 	productCode not in (select distinct(productCode)
 						from orderdetails);
-# S18_3233 - 1985 Toyota Supra: SP chưa bán được, tồn kho còn 7733 sp => Không nhập về thêm
+# S18_3233 - 1985 Toyota Supra: no product are sold, stock still have 7733 ones  => No order
 
 select productLine, count(productLine) as sl_sp_perline
 from products
 group by productLine order by sl_sp_perline desc;
 # Có 7 dòng SP Classic Cars (38sp), Vintage Cars (24sp), Motorcycles (13), Planes (12sp), Trucks and Buses (11), Ships (9), Trains (3)
-# GIẢ THIẾT
-# Những SP có số lượng bán ra < số lượng tồn kho => ko nhập thêm
-# Những SP có số lượng bán ra > số lượng tồn kho => nhập thêm lượng chênh lệch giữa số lượng tồn kho và b
+# GIẢ THIẾT - hypothesis
+# number of products sold < number of stock => do not order more
+# number of products sold > number of stock => nhập thêm lượng chênh lệch giữa số lượng tồn kho và bán ra (order the difference between stock and sales)
 with saled_quantity_product as (
 	select productCode, sum(quantityOrdered) as quantity_saled
 	from orderdetails
@@ -59,19 +59,22 @@ CTE2 as (
 select count(*)
 from CTE2;
 
-# Câu 2: chúng ta nên điều chỉnh các chiến lược tiếp thị và truyền thông ntn cho phù hợp với hành vi của KH? 
+# Câu 2: How should we align our marketing and social strategies with customer behavior?
 # Điều này liên quan đến việc phân loại KH, tìm KH VIP (người rất quan trọng) và những người ít tham gia
+# This involves classifying customers, finding VIP customers (very important people) and those who are less engaged
 
-# GIẢ THIẾT:
-# Dựa trên revenue contribution của mỗi KH để xác định đâu là KH lớn (VIP), KH trung (thân thiết), KH nhỏ 
-# Phân loại dựa trên các đơn hàng có status là: Shipped
+# GIẢ THIẾT - Hypothesis
+# Dựa trên revenue contribution của mỗi KH để xác định đâu là KH lớn (VIP), KH trung (thân thiết), KH nhỏ
+# Based on the revenue contribution of each customer to determine which are large customers (VIP), medium customers (close), and small customers
+# Phân loại dựa trên các đơn hàng có status là: Shipped (Classification based on orders whose status is: Shipped)
 
 # B1: Xác định sự phân bổ về revenue contribution của mỗi KH => từ đó xác định các mốc đóng góp doanh thu cho từng segment. 
-# Dự kiến: tính quantile 1 & 3 => Nếu revenue contribution > Q3 => VIP
-#								  Nếu revenue contribution > Q3 & < q1 => Thân thiết
-#								  Nếu revenue contribution < Q1 => KH nhỏ
+# Determine the distribution of revenue contribution of each customer => thereby determining revenue contribution milestones for each segment.
+# Dự kiến: tính quantile 1 & 3 => Nếu revenue contribution > Q3 => VIP (Calculate quartile 1 and 3 => If revenue contribution > Q3 => VIP customer)
+#	 Nếu revenue contribution > Q3 & < q1 => Thân thiết (If revenue contribution > Q3 and < q1 => Loyal customer)
+#	 Nếu revenue contribution < Q1 => KH nhỏ (If revenue contribution < Q1 => small customer)
 
-# Tính Q1 & Q3
+# Calculate Q1 & Q3
 with CTE1 as (
 	select orderNumber, (quantityOrdered*priceEach) as revenue
 	from orderdetails),
@@ -95,12 +98,12 @@ select
        SUBSTRING_INDEX(SUBSTRING_INDEX(GROUP_CONCAT(CTE4.revenue_per_cust ORDER BY CTE4.revenue_per_cust), ',', FLOOR(0.75 * COUNT(*) + 1)), ',', -1) AS Q3
 from CTE4;
 
-# Check xem trong bảng CTE2 có bị duplicate cả customerNumber & orderNumber ko?
+# Check if CTE2 have duplicates about customerNumber & orderNumber?
 select customerNumber, orderNumber, count(*)
 from orders
 group by customerNumber, orderNumber
 having count(*) > 1;
-# => Không bị duplicate => tiếp tục làm
+# => No duplicate => continue
 
 # Classify customer into segments:
 with CTE1 as (
@@ -172,8 +175,18 @@ group by Cust_Segment;
 #	            khách hàng VIP có mức chi tiêu trên 250.000 usd chiết khấu 8%
 #	Đối với khách hàng thân thiết -> tiếp tục đưa những chính sách khuyến mãi, tặng kèm quà khi mua hàng
 #			VD: tặng kèm camera hành trình, nội thất xe, ...
-#	Đối với khách hàng nhỏ -> đẩy mạnh truyển thông bằng phương pháp quảng cáo (FB, mai,SMS,...) 
+#	Đối với khách hàng nhỏ -> đẩy mạnh truyển thông bằng phương pháp quảng cáo (FB, mail,SMS,...) 
 #										   -> đưa ra các ưu đãi theo mùa, chính sách trả góp,...
 #										   -> quà tặng voucher
 #   Chính sách chung cho tất cả segment: reference programe - giới thiệu khách hàng mới
-							
+
+# For VIP customers -> increase the discount on purchases according to the revenue contributed to encourage continued spending
+# For example: VIP customers with spending over 150,000 USD discount 2%
+# VIP customers with spending over 200,000 USD, 5% discount
+# VIP customers with spending over 250,000 USD, 8% discount
+# For loyal customers -> continue to offer promotional policies, offer gifts when buying
+# Example: comes with a dash camera, car interior, ...
+# For small customers -> promote communication by advertising methods (FB, Mail, SMS,...)
+# -> seasonal offers, installment policies,...
+# -> gift voucher
+# General policy for all segments: reference programe - introduce new customers
